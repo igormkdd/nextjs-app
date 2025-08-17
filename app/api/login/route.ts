@@ -7,13 +7,13 @@ import { NextResponse } from 'next/server';
 const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
-    const { email, password } = await req.json();
+    const { username, password } = await req.json();
 
-    if (!email || !password) {
-        return new Response(JSON.stringify({ error: 'No email or password provided' }), { status: 401 });
+    if (!username || !password) {
+        return new Response(JSON.stringify({ error: 'No username or password provided' }), { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { username } });
     if (!user) {
         return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
     }
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 export const GET = withAuth(async (req, user) => {
     const profile = await prisma.user.findUnique({
         where: { id: user.userId },
-        select: { id: true, email: true, createdAt: true }
+        select: { id: true, username: true, createdAt: true }
     });
 
     if (!profile) {
