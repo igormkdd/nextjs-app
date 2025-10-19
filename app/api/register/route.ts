@@ -7,8 +7,20 @@ export async function POST(req: Request) {
     try {
         const { name, username, email, password } = await req.json();
 
-        if (!name || !username || !email || !password) {
-            return new Response(JSON.stringify({ error: 'No full name or username or email or password provided' }), { status: 401 });
+        if (!name) {
+            return new Response(JSON.stringify({ error: 'No name provided' }), { status: 401 });
+        }
+
+        if (!username) {
+            return new Response(JSON.stringify({ error: 'No username provided' }), { status: 401 });
+        }
+
+        if (!email) {
+            return new Response(JSON.stringify({ error: 'No email provided' }), { status: 401 });
+        }
+
+        if (!password) {
+            return new Response(JSON.stringify({ error: 'No password provided' }), { status: 401 });
         }
 
         const existingUser = await prisma.user.findUnique({ where: { username } });

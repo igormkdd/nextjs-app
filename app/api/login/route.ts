@@ -1,4 +1,3 @@
-import { withAuth } from '@/app/lib/auth';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -7,36 +6,78 @@ import { NextResponse } from 'next/server';
 const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
-    const { username, password } = await req.json();
+    try {
+        const { username, password } = await req.json();
 
-    if (!username || !password) {
-        return new Response(JSON.stringify({ error: 'No username or password provided' }), { status: 401 });
+        if (!username || !password) {
+            return new NextResponse(
+                JSON.stringify({ error: 'No username or password provided' }),
+                { status: 400 }
+            );
+        }
+
+        // Find user with their roles and permissions
+        const user = await prisma.user.findUnique({
+            where: { username },
+            include: {
+                roles: {
+                    include: {
+                        role: {
+                            include: {
+                                permissions: {
+                                    include: {
+                                        permission: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (!user) {
+            return new NextResponse(JSON.stringify({ error: 'User not found' }), { status: 404 });
+        }
+
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+            return new NextResponse(JSON.stringify({ error: 'Invalid password' }), { status: 401 });
+        }
+
+        // Extract roles and permissions from UserRole -> Role -> RolePermission
+        const roles = user.roles.map((r) => r.role.name);
+        const permissions = user.roles.flatMap((r) =>
+            r.role.permissions.map((p) => p.permission.name)
+        );
+
+        // Create JWT toekn
+        const token = jwt.sign(
+            {
+                userId: user.id,
+                username: user.username,
+                roles,
+                permissions,
+            },
+            process.env.JWT_SECRET!,
+            { expiresIn: '1h' }
+        );
+
+        return new NextResponse(
+            JSON.stringify({
+                message: 'Login successful',
+                token,
+                user: {
+                    id: user.id,
+                    username: user.username,
+                    roles,
+                    permissions,
+                },
+            }),
+            { status: 200 }
+        );
+    } catch (err: any) {
+        console.error('Login error:', err);
+        return new NextResponse(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
     }
-
-    const user = await prisma.user.findUnique({ where: { username } });
-    if (!user) {
-        return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
-    }
-
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-        return new Response(JSON.stringify({ error: 'Invalid password' }), { status: 401 });
-    }
-
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1h' });
-
-    return new Response(JSON.stringify({ token }), { status: 200 });
 }
-
-export const GET = withAuth(async (req, user) => {
-    const profile = await prisma.user.findUnique({
-        where: { id: user.userId },
-        select: { id: true, username: true, createdAt: true }
-    });
-
-    if (!profile) {
-        return new NextResponse(JSON.stringify({ error: 'User not found' }), { status: 404 });
-    }
-
-    return new NextResponse(JSON.stringify(profile), { status: 200 });
-});
